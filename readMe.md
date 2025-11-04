@@ -1920,7 +1920,9 @@ Content-Type: application/json
 Location: http://localhost:8081/reports/download/f9e8d7c6-...The final output will be the report content:Shell Scriptcurl "http://localhost:8081/reports/download/f9e8d7c6-..."
 
 ************************************
-Scenario 9: Error Handling Standardization
+
+# pls imple this Scenario 
+9: Error Handling Standardization
 Any request can fail. It's best practice to have a consistent error response format.
 
 Response Type (for errors):
@@ -1940,6 +1942,186 @@ Example Error Response Body:
 ]
 }
 }
+
+
+Alright, let's implement standardized error handling for your API. This will ensure that all errors, whether caused by the client (4xx) or the server (5xx), are returned in a consistent format.Here's how we can achieve this using Spring's exception handling mechanisms.Step 1: Create a Custom Error Response ClassFirst, define a class to represent the structure of your error responses. This will ensure consistency across all error scenarios.Create a new file src/main/java/org/example/errors/ApiError.java:Javapackage org.example.errors;
+
+import java.util.List;
+
+public class ApiError {
+
+    private Error error;
+
+    public ApiError(Error error) {
+        this.error = error;
+    }
+
+    public Error getError() {
+        return error;
+    }
+
+    public void setError(Error error) {
+        this.error = error;
+    }
+
+    public static class Error {
+        private String code;
+        private String message;
+        private List<Detail> details;
+
+        public Error(String code, String message, List<Detail> details) {
+            this.code = code;
+            this.message = message;
+            this.details = details;
+        }
+
+         public Error(String code, String message) {
+            this.code = code;
+            this.message = message;
+        }
+
+        public String getCode() {
+            return code;
+        }
+
+        public void setCode(String code) {
+            this.code = code;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
+
+        public List<Detail> getDetails() {
+            return details;
+        }
+
+        public void setDetails(List<Detail> details) {
+            this.details = details;
+        }
+    }
+
+    public static class Detail {
+        private String field;
+        private String message;
+
+        public Detail(String field, String message) {
+            this.field = field;
+            this.message = message;
+        }
+
+        public String getField() {
+            return field;
+        }
+
+        public void setField(String field) {
+            this.field = field;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
+    }
+}Step 2: Create a Global Exception HandlerNow, create a class to handle exceptions globally across your application. This class will use the ApiError class to format the error responses.Create a new file src/main/java/org/example/errors/GlobalExceptionHandler.java:Javapackage org.example.errors;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@ControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> handleValidationException(MethodArgumentNotValidException ex) {
+        List<ApiError.Detail> details = ex.getBindingResult().getFieldErrors().stream()
+                .map(fieldError -> new ApiError.Detail(fieldError.getField(), fieldError.getDefaultMessage()))
+                .collect(Collectors.toList());
+
+        ApiError error = new ApiError(new ApiError.Error("VALIDATION_ERROR", "The input data failed validation.", details));
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiError> handleResponseStatusException(ResponseStatusException ex) {
+         ApiError error = new ApiError(new ApiError.Error(ex.getStatusCode().toString(), ex.getReason()));
+        return new ResponseEntity<>(error, ex.getStatusCode());
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiError> handleGeneralException(Exception ex) {
+        ApiError error = new ApiError(new ApiError.Error("INTERNAL_SERVER_ERROR", "An unexpected error occurred."));
+        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+}Key improvements and explanations:•@ControllerAdvice: This annotation makes the class a global exception handler for all controllers.•@ExceptionHandler: This annotation maps specific exceptions to handler methods.•MethodArgumentNotValidException handling: This handles validation errors (e.g., from @Valid annotation).  It extracts field-specific error messages.•ResponseStatusException handling: This handles exceptions where you explicitly set an HTTP status code (e.g., throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found")).•General Exception handling: This is a catch-all for any other unexpected exceptions, preventing them from bubbling up and providing a generic 500 error.•Clear Error Codes and Messages: The code uses descriptive error codes (like "VALIDATION_ERROR", "INTERNAL_SERVER_ERROR") and human-readable messages.•Details: Validation errors include a details array with field-specific messages, as requested in your scenario.Step 3: Using the Exception HandlerNow, let's see how to use this exception handler in your controllers.  I'll modify the BookCreationController to include validation and throw a ResponseStatusException if a book already exists.Javapackage org.example;
+
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+
+@RestController
+@RequestMapping("/books")
+public class BookCreationController {
+
+    private final List<BookstoreBook> bookDatabase = new ArrayList<>();
+    private final AtomicLong idGenerator = new AtomicLong();
+
+    @PostMapping
+    public ResponseEntity<BookstoreBook> createBook(@Valid @RequestBody NewBookRequest newBookRequest) {
+        // Check if a book with the same title and author already exists
+        if (bookDatabase.stream().anyMatch(book -> book.title().equals(newBookRequest.title()) && book.author().equals(newBookRequest.author()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A book with this title and author already exists.");
+        }
+
+        // Generate a new unique ID
+        long newId = idGenerator.incrementAndGet();
+
+        // Create a new BookstoreBook from the NewBookRequest
+        BookstoreBook newBook = new BookstoreBook(
+            newId,
+            newBookRequest.title(),
+            newBookRequest.author(),
+            newBookRequest.isbn(),
+            newBookRequest.publishedYear()
+        );
+
+        // Save the new book to the database
+        bookDatabase.add(newBook);
+
+        // Build the URI for the new resource
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+            .path("/{id}")
+            .buildAndExpand(newId)
+            .toUri();
+
+        // Return the new book with a 201 Created status and the Location header
+        return ResponseEntity.created(location).body(newBook);
+    }
+}Key changes:•Validation: The @Valid annotation on the NewBookRequest parameter triggers validation based on the constraints defined in the NewBookRequest class (e.g., @NotBlank, @Positive).•ResponseStatusException: If a book with the same title and author already exists, a ResponseStatusException is thrown with a 400 Bad Request status and a descriptive message.  The GlobalExceptionHandler will catch this and format it into the standard error response.Step 4: Testing the Error Handling1.Validation Error: Send a POST request to /books with an invalid publishedYear (e.g., a negative number or a blank title).  You will receive a 400 Bad Request with an ApiError body, including the VALIDATION_ERROR code and details about the specific field that failed validation.2.Duplicate Book Error: Send two POST requests with the same title and author. The second request will trigger the ResponseStatusException, resulting in a 400 Bad Request with a custom message.3.Other Errors: Remove the validation check, and cause a NullPointerException. You will receive a 500 Internal Server Error with a general message.This comprehensive approach ensures that your API provides consistent and informative error responses, improving the developer experience and making it easier to debug issues.
 
 
 
