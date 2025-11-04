@@ -1523,5 +1523,382 @@ Success (200 OK): Returns the user's wishlist.
 Error (401 Unauthorized): The provided token/key is invalid or missing.
 Error (403 Forbidden): The token is valid, but the user doesn't have permission to view this wishlist.
 
+Of course. Implementing authentication and authorization is a critical step in building a real-world API. This scenario introduces Spring Security, a powerful framework that handles this for you.For this example, we'll use a simple but effective API Key authentication method, as described in your plan. A client will have to provide a secret key in the X-API-Key header to access protected endpoints. This is a great starting point before moving to more complex systems like OAuth2 or JWT.Let's break it down.Step 1: Add Spring Security DependencyFirst, you need to add the Spring Security starter to your pom.xml. This brings in all the necessary libraries.Add this to your <dependencies> section:Resource XML<!-- For handling Authentication and Authorization -->
+<dependency>
+<groupId>org.springframework.boot</groupId>
+<artifactId>spring-boot-starter-security</artifactId>
+</dependency>After adding this, reload your Maven project.Important: Once you add this dependency, all endpoints in your application will be protected by default, and you'll get a 401 Unauthorized error if you try to access them. Our next step is to configure this.Step 2: Create a Custom Authentication FilterThe "filter" is a component that intercepts every incoming request. We will create one that looks for the X-API-Key header, validates it, and tells Spring Security whether the user is authenticated.Create a new file src/main/java/org/example/security/ApiKeyAuthFilter.java:Javapackage org.example.security;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.Collections;
+
+public class ApiKeyAuthFilter extends OncePerRequestFilter {
+
+    // For this example, we'll hardcode the valid API keys and their owners.
+    // In a real application, this would come from a database or a secure config.
+    private static final String VALID_API_KEY_SALAH = "user-salah-key-12345";
+    private static final String VALID_API_KEY_GUEST = "user-guest-key-67890";
+    private static final String HEADER_API_KEY = "X-API-Key";
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+
+        // 1. Get the API key from the request header.
+        String apiKey = request.getHeader(HEADER_API_KEY);
+
+        // 2. Validate the key and create an Authentication object.
+        if (VALID_API_KEY_SALAH.equals(apiKey)) {
+            // Key is valid for user "salah".
+            // We create an "Authentication" object representing this user.
+            var authentication = new UsernamePasswordAuthenticationToken(
+                    "salah", // The principal (username)
+                    null, // No credentials needed
+                    Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER")) // The user's roles/permissions
+            );
+            // 3. Set the Authentication in the SecurityContext.
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        } else if (VALID_API_KEY_GUEST.equals(apiKey)) {
+            // Key is valid for user "guest".
+            var authentication = new UsernamePasswordAuthenticationToken(
+                    "guest",
+                    null,
+                    Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+            );
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+        }
+
+        // 4. Continue the filter chain.
+        // If the key was invalid, the SecurityContext remains empty, and access will be denied later.
+        filterChain.doFilter(request, response);
+    }
+}Step 3: Configure Spring SecurityNow we need to tell Spring Security how to behave: which endpoints are public (like Swagger UI), which are protected, and to use our new ApiKeyAuthFilter.Create a new file src/main/java/org/example/security/SecurityConfig.java:Javapackage org.example.security;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                // 1. Disable CSRF, not needed for stateless REST APIs
+                .csrf(csrf -> csrf.disable())
+
+                // 2. Set session management to stateless
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                // 3. Add our custom API key filter before the standard authentication filter
+                .addFilterBefore(new ApiKeyAuthFilter(), UsernamePasswordAuthenticationFilter.class)
+
+                // 4. Define authorization rules for endpoints
+                .authorizeHttpRequests(auth -> auth
+                        // Allow public access to Swagger UI and API docs
+                        .requestMatchers(
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**"
+                        ).permitAll()
+                        // Allow public access to our simple book endpoints for demonstration
+                        .requestMatchers("/books/**", "/api/parameters/**").permitAll()
+                        // Any other request must be authenticated
+                        .anyRequest().authenticated()
+                );
+
+        return http.build();
+    }
+}Step 4: Create the WishlistControllerFinally, let's create the protected endpoint. This controller will check who the authenticated user is and decide if they are authorized to see the content.Create the file src/main/java/org/example/WishlistController.java:Javapackage org.example;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+public class WishlistController {
+
+    // This is Salah's personal wishlist. Only he should be able to see it.
+    private final List<String> salahsWishlist = List.of("The Silmarillion", "Dune Messiah");
+
+    @GetMapping("/wishlist")
+    public ResponseEntity<List<String>> getWishlist() {
+        // Get the current user's authentication details from the SecurityContext
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String currentUsername = authentication.getName();
+
+        // --- This is the AUTHORIZATION check ---
+        // We check if the authenticated user is the owner of the resource.
+        if ("salah".equals(currentUsername)) {
+            // Success (200 OK): The user is authorized.
+            return ResponseEntity.ok(salahsWishlist);
+        } else {
+            // Error (403 Forbidden): The user is authenticated but not authorized for this resource.
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+}How to Test ItRestart your application. Now you can test the three outcomes from your scenario plan using curl or any API client.1.Success (200 OK): You provide the correct API key for the resource owner.Shell Scriptcurl -X GET http://localhost:8081/wishlist \
+-H "X-API-Key: user-salah-key-12345"Result: You will get a 200 OK status and the JSON body ["The Silmarillion","Dune Messiah"].2.Error (401 Unauthorized): You provide a wrong key or no key at all.Shell Script# Using a wrong key
+curl -X GET http://localhost:8081/wishlist \
+-H "X-API-Key: wrong-key"
+
+# Using no key
+curl -X GET http://localhost:8081/wishlist  Result: You will get a 401 Unauthorized error in both cases.3.Error (403 Forbidden): You provide a valid key, but for a different user who doesn't own the wishlist.Shell Scriptcurl -X GET http://localhost:8081/wishlist \
+-H "X-API-Key: user-guest-key-67890"Result: You will get a 403 Forbidden error. The server knows who you are ("guest"), but it has determined you are not allowed to see Salah's wishlist.
+
+**************************************************
+
+pls imple this sernario Scenario 8: Asynchronous Operations
+You request a report of all book sales. This is a long-running task.
+
+API Endpoint: POST /reports/sales
+Method Type: POST
+Parameter Type:
+Request Body (Optional): Criteria for the report (e.g., date range).
+Response Type:
+Success (202 Accepted): The request was accepted for processing, but it's not finished. The response body often contains a link to check the status.
+// Response (202 Accepted)
+{
+"message": "Report generation started",
+"status_url": "/queue/status/12345"
+}
+You would then poll the status_url with a GET request until it returns a 303 See Other with a Location header to download the finished report, or a 200 OK when the report is ready.
+
+
+Of course! Implementing an asynchronous API is a fantastic way to handle long-running tasks without blocking the client. This pattern is essential for creating responsive and robust applications.We'll use Spring's built-in support for asynchronous execution (@Async) to achieve this. Here is a step-by-step guide to building the scenario.Step 1: Enable Asynchronous ProcessingFirst, you need to tell your Spring Boot application to enable asynchronous method execution.Modify your main application class, RestApiApplication.java, to add the @EnableAsync annotation.Javapackage org.example;
+
+import io.swagger.v3.oas.annotations.OpenAPIDefinition;
+import io.swagger.v3.oas.annotations.info.Info;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync; // Import this
+
+@SpringBootApplication
+@EnableAsync // Add this annotation
+@OpenAPIDefinition(
+info = @Info(
+title = "Bookstore API",
+version = "1.0.0",
+description = "A simple API for managing a collection of books."
+)
+)
+public class RestApiApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(RestApiApplication.class, args);
+    }
+}Step 2: Create Models for Task ManagementWe need a few records and an enum to manage the state of our report generation tasks.Create a new file src/main/java/org/example/async/ReportModels.java. I'm putting them all in one file for simplicity.Javapackage org.example.async;
+
+import java.time.LocalDate;
+
+// 1. An enum to represent the status of a task
+enum TaskStatus {
+PENDING,
+IN_PROGRESS,
+COMPLETED,
+FAILED
+}
+
+// 2. A record to hold the state of a single task
+record Task(String taskId, TaskStatus status, String resultUrl) {
+// Helper methods to create new instances with updated status
+public Task withStatus(TaskStatus newStatus) {
+return new Task(this.taskId, newStatus, this.resultUrl);
+}
+public Task withResultUrl(String newResultUrl) {
+return new Task(this.taskId, this.status, newResultUrl);
+}
+}
+
+// 3. A DTO for the initial request body
+public record ReportRequest(LocalDate fromDate, LocalDate toDate) {}
+
+// 4. A DTO for the initial response body
+record ReportSubmissionResponse(String message, String statusUrl) {}Step 3: Create the Asynchronous ServiceThis service will contain the long-running logic. The @Async annotation tells Spring to run this method in a separate thread, allowing the controller to return a response immediately.Create a new file src/main/java/org/example/async/ReportService.java:Javapackage org.example.async;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+public class ReportService {
+
+    private static final Logger logger = LoggerFactory.getLogger(ReportService.class);
+
+    // This method will run in a background thread
+    @Async
+    public void generateReport(Map<String, Task> taskRegistry, String taskId, ReportRequest request) {
+        logger.info("Starting report generation for task ID: {}", taskId);
+
+        try {
+            // 1. Set status to IN_PROGRESS
+            taskRegistry.computeIfPresent(taskId, (id, task) -> task.withStatus(TaskStatus.IN_PROGRESS));
+
+            // 2. Simulate a long-running process (e.g., 10 seconds)
+            Thread.sleep(10000);
+
+            // 3. Generate a unique ID for the final report file
+            String reportFileId = UUID.randomUUID().toString();
+
+            // 4. Build the final download URL for the completed report
+            String downloadUrl = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/reports/download/{reportFileId}")
+                .buildAndExpand(reportFileId)
+                .toUriString();
+
+            // 5. Mark the task as COMPLETED and set the result URL
+            taskRegistry.computeIfPresent(taskId, (id, task) ->
+                task.withStatus(TaskStatus.COMPLETED).withResultUrl(downloadUrl)
+            );
+
+            logger.info("Successfully completed report generation for task ID: {}", taskId);
+
+        } catch (InterruptedException e) {
+            logger.error("Report generation was interrupted for task ID: {}", taskId, e);
+            taskRegistry.computeIfPresent(taskId, (id, task) -> task.withStatus(TaskStatus.FAILED));
+            Thread.currentThread().interrupt();
+        }
+    }
+}Step 4: Create the Asynchronous ControllerThis controller will expose the endpoints to start the task, check its status, and download the final report.Create a new file src/main/java/org/example/async/AsyncReportController.java:Javapackage org.example.async;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.net.URI;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+public class AsyncReportController {
+
+    private final ReportService reportService;
+    // A thread-safe map to act as our task database
+    private final Map<String, Task> taskRegistry = new ConcurrentHashMap<>();
+
+    public AsyncReportController(ReportService reportService) {
+        this.reportService = reportService;
+    }
+
+    /**
+     * Scenario 8, Step 1: Client submits a request to start a long-running task.
+     */
+    @PostMapping("/reports/sales")
+    public ResponseEntity<ReportSubmissionResponse> submitReportRequest(@RequestBody ReportRequest request) {
+        // 1. Generate a unique ID for this task
+        String taskId = UUID.randomUUID().toString();
+
+        // 2. Create and register the task with PENDING status
+        Task task = new Task(taskId, TaskStatus.PENDING, null);
+        taskRegistry.put(taskId, task);
+
+        // 3. Start the async process. This call returns immediately.
+        reportService.generateReport(taskRegistry, taskId, request);
+
+        // 4. Build the status URL for the client to poll
+        String statusUrl = ServletUriComponentsBuilder.fromCurrentRequest()
+            .path("/../queue/status/{taskId}") // Go up one level and then to the status path
+            .buildAndExpand(taskId)
+            .toUriString();
+
+        // 5. Return 202 Accepted with the status URL
+        ReportSubmissionResponse responseBody = new ReportSubmissionResponse("Report generation started", statusUrl);
+        return ResponseEntity.accepted().body(responseBody);
+    }
+
+    /**
+     * Scenario 8, Step 2: Client polls the status endpoint.
+     */
+    @GetMapping("/queue/status/{taskId}")
+    public ResponseEntity<?> getTaskStatus(@PathVariable String taskId) {
+        Task task = taskRegistry.get(taskId);
+
+        if (task == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        if (task.status() == TaskStatus.COMPLETED) {
+            // Task is done. Redirect the client to the final report URL.
+            return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                .location(URI.create(task.resultUrl()))
+                .build();
+        } else {
+            // Task is still pending or in progress. Return the current status.
+            return ResponseEntity.ok(task);
+        }
+    }
+
+    /**
+     * Scenario 8, Step 3: Client downloads the final report.
+     */
+    @GetMapping("/reports/download/{reportFileId}")
+    public ResponseEntity<String> downloadReport(@PathVariable String reportFileId) {
+        // In a real app, you would fetch the report from storage and stream it.
+        String reportContent = "This is the content of your sales report with ID: " + reportFileId;
+        return ResponseEntity.ok()
+            .header("Content-Disposition", "attachment; filename=\"report-" + reportFileId + ".txt\"")
+            .body(reportContent);
+    }
+}How to Test the Asynchronous FlowRestart your application. Since this flow involves multiple steps over time, curl is the perfect tool.1.Start the Report Generation Send a POST request. You will get an immediate 202 Accepted response.Shell Scriptcurl -X POST http://localhost:8081/reports/sales \
+-H "Content-Type: application/json" \
+-d '{"fromDate": "2025-01-01", "toDate": "2025-10-31"}'The response will look like this. Copy the statusUrl.JSON{
+"message": "Report generation started",
+"statusUrl": "http://localhost:8081/queue/status/a1b2c3d4-e5f6-..."
+}2.Check the Status (immediately) Use curl on the statusUrl you just copied. Since the task is still running, you'll get a 200 OK with the current status.Shell Scriptcurl -i "http://localhost:8081/queue/status/a1b2c3d4-e5f6-..."The -i flag shows headers. The response will be:KotlinHTTP/1.1 200 OK
+Content-Type: application/json
+
+{"taskId":"a1b2c3d4-e5f6-...","status":"IN_PROGRESS","resultUrl":null}3.Check the Status Again (after 10+ seconds) Run the same command again. This time, the task is complete. The server will respond with a 303 See Other and a Location header pointing to the final report.Shell Scriptcurl -i "http://localhost:8081/queue/status/a1b2c3d4-e5f6-..."The response will now be a redirect:Shell Scriptcurl -i "http://localhost:8081/queue/status/a1b2c3d4-e5f6-..."4.Download the Report Your client would now automatically follow the Location header to download the final file. You can simulate this with another curl command.KotlinHTTP/1.1 303 See Other
+Location: http://localhost:8081/reports/download/f9e8d7c6-...The final output will be the report content:Shell Scriptcurl "http://localhost:8081/reports/download/f9e8d7c6-..."
+
+************************************
+Scenario 9: Error Handling Standardization
+Any request can fail. It's best practice to have a consistent error response format.
+
+Response Type (for errors):
+Client Errors (4xx): The client did something wrong.
+Server Errors (5xx): The server failed.
+Example Error Response Body:
+// Response (400 Bad Request)
+{
+"error": {
+"code": "VALIDATION_ERROR",
+"message": "The input data failed validation.",
+"details": [
+{
+"field": "published_year",
+"message": "Published year must not be in the future."
+}
+]
+}
+}
+
+
 
 
