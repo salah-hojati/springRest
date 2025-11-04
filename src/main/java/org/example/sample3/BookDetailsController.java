@@ -34,10 +34,10 @@ public class BookDetailsController {
     @GetMapping("/{id}")
     public ResponseEntity<BookstoreBook> getBookById(@PathVariable long id) {
         Optional<BookstoreBook> book = bookDatabase.stream()
-            .filter(b -> b.id() == id)
-            .findFirst();
+                .filter(b -> b.id() == id)
+                .findFirst();
 
         return book.map(ResponseEntity::ok) // Book found: return 200 OK with the book
-                   .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build()); // Book not found: return 404 Not Found
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build()); // Book not found: return 404 Not Found
     }
 }
