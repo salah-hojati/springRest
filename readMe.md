@@ -1,6 +1,27 @@
 # create project by java 11 swagger spring boot maven for restApi
 
-1.Understanding REST APIs in Spring BootA REST API (Representational State Transfer Application Programming Interface) is a way for different software applications to communicate with each other over the internet. It's like a contract that defines how to request and receive data.In Spring Boot, you create REST APIs using Controllers. These are special Java classes that handle incoming web requests.•@RestController: This annotation marks a class as a controller where every method returns a domain object instead of a view. It's a combination of @Controller and @ResponseBody.•@GetMapping, @PostMapping, @PutMapping, @DeleteMapping: These annotations map HTTP requests (GET, POST, PUT, DELETE) to specific methods in your controller.2. Understanding Swagger (OpenAPI 3)When you build an API, you need to document it so others (or your future self!) know how to use it. Swagger (now officially the OpenAPI Specification) is a standard for documenting REST APIs.The springdoc-openapi library is the best way to integrate Swagger with a modern Spring Boot application. It automatically generates API documentation based on your Spring configuration and controller code. It also provides a beautiful, interactive UI to explore and test your API endpoints directly in the browser.Step-by-Step Guide: Building Your First REST API with SwaggerLet's build a simple API to manage a list of books.Step 1: Update Your pom.xmlFirst, you need to add the necessary dependencies to your pom.xml. This includes the Spring Boot parent (which manages dependency versions for you), the web starter (for building REST APIs), and the springdoc-openapi starter for the documentation.Your pom.xml should look like this:Resource XML<?xml version="1.0" encoding="UTF-8"?>
+1. Understanding REST APIs in Spring BootA REST API 
+(Representational State Transfer Application Programming Interface) 
+is a way for different software applications to communicate with each other over the internet. 
+It's like a contract that defines how to request and receive data.
+In Spring Boot, you create REST APIs using Controllers. 
+These are special Java classes that handle incoming web requests.
+
+ •@RestController: This annotation marks a class as a controller where every method returns a domain object instead of a view. 
+ It's a combination of @Controller and @ResponseBody.•@GetMapping, @PostMapping, @PutMapping, @DeleteMapping: 
+ These annotations map HTTP requests (GET, POST, PUT, DELETE) to specific methods in your controller.
+
+2. Understanding Swagger (OpenAPI 3)When you build an API, you need to document it so others (or your future self!) know how to use it. 
+Swagger (now officially the OpenAPI Specification) is a standard for documenting REST APIs.
+The springdoc-openapi library is the best way to integrate Swagger with a modern Spring Boot application. 
+It automatically generates API documentation based on your Spring configuration and controller code. 
+It also provides a beautiful, interactive UI to explore and test your API endpoints directly in the browser.
+Step-by-Step Guide: Building Your First REST API with SwaggerLet's build a simple API to manage a list of books.Step
+ 1: Update Your pom.xmlFirst, you need to add the necessary dependencies to your pom.xml. 
+This includes the Spring Boot parent (which manages dependency versions for you), 
+the web starter (for building REST APIs), and the springdoc-openapi starter for the documentation.Your pom.xml should look like this:Resource XML
+```
+<?xml version="1.0" encoding="UTF-8"?>
    <project xmlns="http://maven.apache.org/POM/4.0.0"
    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -54,8 +75,20 @@
         </plugins>
     </build>
 
-</project>Key Changes:•Added the <parent> section for Spring Boot.•Changed maven.compiler.source and target to the more standard <java.version>.•Added spring-boot-starter-web and springdoc-openapi-starter-webmvc-ui dependencies.•Added the spring-boot-maven-plugin to help package the application.After updating, make sure your IDE (like IntelliJ or VS Code) reloads the Maven project to download the new dependencies.Step 2: Create the Main Application ClassThis is the entry point for your Spring Boot application. Create a new Java file, for example, src/main/java/org/example/RestApiApplication.java.Javapackage org.example;
+</project>
+```
+Key Changes:
 
+•Added the <parent> section for Spring Boot.
+•Changed maven.compiler.source and target to the more standard <java.version>.
+•Added spring-boot-starter-web and springdoc-openapi-starter-webmvc-ui dependencies.
+•Added the spring-boot-maven-plugin to help package the application.
+After updating, make sure your IDE (like IntelliJ or VS Code) reloads the Maven project to download the new dependencies.
+
+Step 2: Create the Main Application ClassThis is the entry point for your Spring Boot application. 
+Create a new Java file, for example, ```src/main/java/org/example/RestApiApplication.java.Java ``` package org.example;
+
+```
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -66,8 +99,15 @@ public class RestApiApplication {
         SpringApplication.run(RestApiApplication.class, args);
     }
 
-}The @SpringBootApplication annotation enables auto-configuration and component scanning.Step 3: Create a Model ClassThis will be a simple Java object (POJO) to represent our data. Let's create a Book.Create the file src/main/java/org/example/Book.java:Javapackage org.example;
+}
+```
+The @SpringBootApplication annotation enables auto-configuration and component scanning.
 
+Step 3: Create a Model ClassThis will be a simple Java object (POJO) to represent our data. 
+Let's create a Book.Create the file ```src/main/java/org/example/Book.java``` :
+Java 
+```
+package org.example;
 // Using a record for a simple, immutable data carrier
 // It automatically provides a constructor, getters, equals(), hashCode(), and toString().
 public record Book(long id, String title, String author) {
@@ -124,7 +164,9 @@ public class BookController {
         books.put(newId, newBook);
         return newBook;
     }
-}Explanation:•@RestController: 
+}
+```
+Explanation:•@RestController: 
 Tells Spring this class handles HTTP requests.
 •@RequestMapping("/api/books"): 
 All endpoints in this class will start with /api/books.

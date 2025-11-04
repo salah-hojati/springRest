@@ -1,4 +1,4 @@
-package org.example.sample9;
+package org.example;
 
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Info;
@@ -15,9 +15,9 @@ import org.springframework.scheduling.annotation.EnableAsync; // Import this
         description = "A simple API for managing a collection of books."
     )
 )
-public class RestApiApplication {
+public class RestApiApplication9 {
 
     public static void main(String[] args) {
-        SpringApplication.run(RestApiApplication.class, args);
+        SpringApplication.run(RestApiApplication9.class, args);
     }
 }
