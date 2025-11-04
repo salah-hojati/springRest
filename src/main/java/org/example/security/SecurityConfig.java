@@ -2,6 +2,7 @@ package org.example.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -31,7 +32,12 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
-                        ).permitAll()
+                        ).permitAll().
+                        requestMatchers(HttpMethod.GET, "/api/**").permitAll() // Allow GET without auth
+                        .requestMatchers(HttpMethod.POST, "/api/reports/**").permitAll() // Allow all report POSTs
+                        .requestMatchers(HttpMethod.POST, "/api/**").hasRole("ADMIN") // Restrict POST
+                        .requestMatchers(HttpMethod.PUT, "/api/**").hasRole("ADMIN") // Restrict PUT
+                        .requestMatchers(HttpMethod.DELETE, "/api/**").hasRole("ADMIN") // Restrict DELETE
                         // Allow public access to our simple book endpoints for demonstration
                         .requestMatchers("/books/**", "/api/parameters/**").permitAll()
                         // Any other request must be authenticated
