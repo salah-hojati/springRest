@@ -139,12 +139,14 @@ The one without a value maps to /api/books, and @GetMapping("/{id}") maps to pat
 
 3.You will see the Spring Boot banner in your console, and it will start on port 8080 by default.Step 6: Explore Your API!Your API is now live and documented!
 
-1.Access the Swagger UI: Open your web browser and go to: http://localhost:8080/swagger-ui.htmlYou will see a beautiful UI that lists all your endpoints (GET /api/books, GET /api/books/{id}, etc.). 
+1.Access the Swagger UI: Open your web browser and go to: http://localhost:8080/swagger-ui.html  You will see a beautiful UI that lists all your endpoints (GET /api/books, GET /api/books/{id}, etc.). 
 
 You can expand each one, see the expected request and response formats, and even click "Try it out" to send live requests to your running application!
 
 Access the API directly:
-You can also use a tool like curl or Postman, or just your browser for GET requests.•Get all books: http://localhost:8080/api/books•Get book with ID 1: http://localhost:8080/api/books/1
+You can also use a tool like curl or Postman, or just your browser for GET requests.•Get all books: http://localhost:8080/api/books  
+
+•Get book with ID 1: http://localhost:8080/api/books/1
 
 # pls change port from  8080  to 8081
 
@@ -737,5 +739,789 @@ That's a great question, and it gets to the heart of two different ways of worki
 </plugin>
 </plugins>
 </build>Summary| Feature | Your "Code-First" Approach | "Design-First" with Maven Plugin | | :--- | :--- | :--- | | Source of Truth | Your Java Controller code | A handwritten .yaml or .json file | | Generation Time | Runtime (when app starts) | Build-time (during mvn command) | | Key Tool | springdoc-openapi dependency | openapi-generator-maven-plugin | | Your Job | Write the controller implementation. | Write the API spec file, then implement the generated Java interface. |Conclusion: Your current setup is modern, correct, and often simpler for many projects. You don't need to add anything else to your pom.xml for documentation generation.
+
+
+# pls create new sample for Parameters: Data you send with the request (in the URL, body, or headers). maybe in new contoller
+
+
+Of course! That's an excellent topic to dive into. Understanding how to handle different types of parameters is fundamental to building useful REST APIs.Based on the scenarios in your plan, let's create a new, dedicated controller called ParameterExamplesController. This controller will demonstrate how to capture data sent in the URL (as path and query parameters), in the request body, and in request headers.This example will fit perfectly alongside your existing BookController.1. Create a DTO for the Request BodyFirst, let's create a simple record to represent the data we'll send in a request body.Create the file src/main/java/org/example/UserFeedback.java:Javapackage org.example;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+
+/**
+* A DTO (Data Transfer Object) to represent feedback from a user.
+* We use validation annotations to ensure the data is well-formed.
+  */
+  public record UserFeedback(
+  @NotBlank(message = "Username cannot be blank")
+  String username,
+
+  @Min(value = 1, message = "Rating must be between 1 and 5")
+  @Max(value = 5, message = "Rating must be between 1 and 5")
+  int rating,
+
+  String comment
+  ) {}2. Create the New ParameterExamplesControllerNow, create the main controller file. This class will contain several endpoints, each designed to showcase a different parameter type.Create the file src/main/java/org/example/ParameterExamplesController.java:Javapackage org.example;
+
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+/**
+* This controller demonstrates various ways to receive parameters in a REST API.
+  */
+  @RestController
+  @RequestMapping("/api/parameters") // A new base path for these examples
+  public class ParameterExamplesController {
+
+  /**
+   * Scenario 1: Path Parameters (from the URL path)
+   * Captures a dynamic value directly from the URL. Essential for identifying a specific resource.
+   * How to test: GET http://localhost:8081/api/parameters/item/123
+     */
+     @GetMapping("/item/{itemId}")
+     public String getByPathParameter(@PathVariable long itemId) {
+     return "You requested the item with the Path Parameter ID: " + itemId;
+     }
+
+  /**
+   * Scenario 2: Query Parameters (from the URL query string)
+   * Used for optional filtering, sorting, or pagination.
+   * How to test: GET http://localhost:8081/api/parameters/search?category=tech&sort=price_asc&limit=20
+     */
+     @GetMapping("/search")
+     public String getByQueryParameters(
+     @RequestParam String category, // A required query parameter
+     @RequestParam(required = false) String sort, // An optional query parameter
+     @RequestParam(defaultValue = "10") int limit // An optional parameter with a default value
+     ) {
+     return String.format(
+     "Searching in category '%s'. Sorting by '%s'. Limit is %d.",
+     category,
+     sort != null ? sort : "default", // Handle the optional value
+     limit
+     );
+     }
+
+  /**
+   * Scenario 3: Request Body (the data payload of the request)
+   * Used to send complex data, like a JSON object, when creating or updating a resource.
+   * How to test: POST http://localhost:8081/api/parameters/feedback with a JSON body.
+     */
+     @PostMapping("/feedback")
+     public ResponseEntity<String> processRequestBody(@Valid @RequestBody UserFeedback feedback) {
+     String responseMessage = String.format(
+     "Received feedback from '%s' with rating %d. Comment: '%s'",
+     feedback.username(),
+     feedback.rating(),
+     feedback.comment()
+     );
+     return ResponseEntity.ok(responseMessage);
+     }
+
+  /**
+   * Scenario 4: Header Parameters (metadata about the request)
+   * Used for sending metadata like authentication tokens, client type, or caching controls.
+   * How to test: GET http://localhost:8081/api/parameters/headers and add a custom header "X-Client-Version".
+     */
+     @GetMapping("/headers")
+     public String getFromHeaders(
+     @RequestHeader("User-Agent") String userAgent,
+     @RequestHeader(name = "X-Client-Version", required = false, defaultValue = "unknown") String clientVersion
+     ) {
+     return String.format(
+     "Request came from client version '%s'. Full User-Agent: '%s'",
+     clientVersion,
+     userAgent
+     );
+     }
+
+  /**
+   * Bonus Scenario: Capturing all headers
+   * Sometimes you need to inspect all headers without knowing their names in advance.
+     */
+     @GetMapping("/all-headers")
+     public ResponseEntity<Map<String, String>> getAllHeaders(@RequestHeader Map<String, String> headers) {
+     // The map will contain all request headers.
+     // You can now iterate over them or look for specific ones.
+     return ResponseEntity.ok(headers);
+     }
+     }How to Test Your New EndpointsAfter adding these files, restart your application. You can now test these new endpoints using the Swagger UI or a tool like curl.1.Open Swagger UI: Navigate to http://localhost:8081/swagger-ui.html You will see a new section called parameter-examples-controller. You can use the "Try it out" feature for each endpoint.2.Using curl (from a terminal):•Test Path Parameter:Shell Scriptcurl http://localhost:8081/api/parameters/item/456•Test Query Parameters:Shell Script# With all params
+     curl "http://localhost:8081/api/parameters/search?category=books&sort=author_asc&limit=50"
+
+# Without the optional 'sort' param
+curl "http://localhost:8081/api/parameters/search?category=electronics"•Test Request Body:Shell Scriptcurl -X POST http://localhost:8081/api/parameters/feedback \
+-H "Content-Type: application/json" \
+-d '{
+"username": "salah",
+"rating": 5,
+"comment": "Great examples!"
+}'•Test Header Parameters:Shell Scriptcurl http://localhost:8081/api/parameters/headers \
+-H "X-Client-Version: 1.2.3"
+
+
+
+*****************
+
+# pls implement this senario in new class .Scenario 1: Getting All Resources (The Read-All Operation)
+You want to get a list of all books in the bookstore.
+
+API Endpoint: GET /books
+Method Type: GET
+Parameter Type:
+Query Parameters (Optional): Used for filtering, sorting, and pagination.
+?author=J.K.+Rowling (Filter by author)
+?sort=title&order=asc (Sort by title, ascending)
+?page=2&limit=10 (Get the second page, 10 books per page)
+Response Type:
+Success (200 OK): Returns a JSON array of book objects.
+Error (500 Internal Server Error): If something unexpected fails on the server.
+Example Request & Response:
+GET /books?author=J.K.+Rowling HTTP/1.1
+Host: api.example.com
+// Response (200 OK)
+```
+[
+{
+"id": 1,
+"title": "Harry Potter and the Philosopher's Stone",
+"author": "J.K. Rowling",
+"isbn": "9780439708180",
+"published_year": 1997
+}
+]
+```
+Of course! This is a fantastic scenario to implement as it covers some of the most common and powerful features of a real-world REST API: filtering, sorting, and pagination.I will create a new controller and a corresponding new Book model as described in your plan. This will keep the example clean and separate from the previous ones.Step 1: Create a More Detailed Book ModelFirst, let's create a new Book model that matches the fields in your scenario (id, title, author, isbn, published_year).Create the file src/main/java/org/example/BookstoreBook.java:Javapackage org.example;
+
+/**
+* Represents a book in the bookstore, matching the detailed fields from the plan.
+* We use a Java Record for a concise, immutable data carrier.
+  */
+  public record BookstoreBook(
+  long id,
+  String title,
+  String author,
+  String isbn,
+  int publishedYear
+  ) {}Step 2: Create the New BookstoreControllerNow, let's create the new controller. This class will contain the logic to handle the GET /books endpoint with all its optional query parameters. I'll add plenty of data to make the filtering and sorting features easy to test.Create the file src/main/java/org/example/BookstoreController.java:Javapackage org.example;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+@RestController
+@RequestMapping("/books") // The endpoint from your plan
+public class BookstoreController {
+
+    private final List<BookstoreBook> bookDatabase;
+
+    // Constructor to initialize an in-memory database of books
+    public BookstoreController() {
+        this.bookDatabase = List.of(
+            new BookstoreBook(1, "Harry Potter and the Philosopher's Stone", "J.K. Rowling", "9780439708180", 1997),
+            new BookstoreBook(2, "The Hobbit", "J.R.R. Tolkien", "9780547928227", 1937),
+            new BookstoreBook(3, "1984", "George Orwell", "9780451524935", 1949),
+            new BookstoreBook(4, "The Lord of the Rings", "J.R.R. Tolkien", "9780618640157", 1954),
+            new BookstoreBook(5, "Harry Potter and the Chamber of Secrets", "J.K. Rowling", "9780439064873", 1998),
+            new BookstoreBook(6, "Animal Farm", "George Orwell", "9780451526342", 1945)
+        );
+    }
+
+    /**
+     * Implements Scenario 1: Getting a list of all books with optional filtering, sorting, and pagination.
+     */
+    @GetMapping
+    public List<BookstoreBook> getBooks(
+            // --- Filtering ---
+            @RequestParam(required = false) String author,
+
+            // --- Sorting ---
+            @RequestParam(required = false, defaultValue = "title") String sort,
+            @RequestParam(required = false, defaultValue = "asc") String order,
+
+            // --- Pagination ---
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "10") int limit
+    ) {
+        // Start with a stream of all books
+        Stream<BookstoreBook> bookStream = bookDatabase.stream();
+
+        // 1. Apply Filtering
+        if (author != null && !author.isBlank()) {
+            bookStream = bookStream.filter(book -> book.author().equalsIgnoreCase(author));
+        }
+
+        // 2. Apply Sorting
+        Comparator<BookstoreBook> comparator = switch (sort.toLowerCase()) {
+            case "author" -> Comparator.comparing(BookstoreBook::author);
+            case "publishedyear" -> Comparator.comparing(BookstoreBook::publishedYear);
+            default -> Comparator.comparing(BookstoreBook::title);
+        };
+
+        if ("desc".equalsIgnoreCase(order)) {
+            comparator = comparator.reversed();
+        }
+        // The sorted() method on a stream is an "intermediate operation"
+        bookStream = bookStream.sorted(comparator);
+
+        // 3. Apply Pagination
+        // skip() and limit() are also intermediate operations
+        bookStream = bookStream.skip((long) page * limit).limit(limit);
+
+        // 4. Collect the results into a list
+        // collect() is a "terminal operation" that triggers the stream processing
+        return bookStream.collect(Collectors.toList());
+    }
+}
+
+How It Works and How to Test ItAfter restarting your application, you can test the new /books endpoint. The Swagger UI at http://localhost:8081/swagger-ui.html will show the new bookstore-controller with all the optional parameters.Here are some example URLs you can try directly in your browser to see the results:•Get all books (default sort by title, asc):•http://localhost:8081/books•Filter by author:•http://localhost:8081/books?author=J.R.R. Tolkien•Sort by publishedYear in descending order:•http://localhost:8081/books?sort=publishedYear&order=desc•Pagination (get the first page, with 2 books per page):•http://localhost:8081/books?page=0&limit=2•Pagination (get the second page, with 2 books per page):•http://localhost:8081/books?page=1&limit=2•Combine everything! Filter for an author and sort the results:•http://localhost:8081/books?author=George Orwell&sort=publishedYear&order=ascThis implementation provides a powerful and flexible way for clients to query your data, exactly as described in your scenario plan.
+
+
+*******************
+# pls implement this sernario in new class Scenario 2: Getting a Single Resource (The Read-One Operation)
+You want to get the details of one specific book, knowing its ID.
+
+API Endpoint: GET /books/{id}
+Method Type: GET
+Parameter Type:
+Path Parameter (Required): The {id} in the URL. It uniquely identifies the resource.
+Response Type:
+Success (200 OK): Returns a JSON object for the single book.
+Error (404 Not Found): If no book with that ID exists.
+Example Request & Response:
+GET /books/1 HTTP/1.1
+Host: api.example.com
+// Response (200 OK)
+{
+"id": 1,
+"title": "Harry Potter and the Philosopher's Stone",
+"author": "J.K. Rowling",
+"isbn": "9780439708180",
+"published_year": 1997
+}
+
+f course! Let's implement the "Getting a Single Resource" scenario in a new class. This will demonstrate how to use a path parameter to retrieve a specific book's details.I'll create a new controller and reuse the BookstoreBook model from the previous example to maintain consistency.Step 1: Re-use the BookstoreBook ModelWe'll use the BookstoreBook model from the previous example. If you don't have it, create the file src/main/java/org/example/BookstoreBook.java:Javapackage org.example;
+
+/**
+* Represents a book in the bookstore, matching the detailed fields from the plan.
+* We use a Java Record for a concise, immutable data carrier.
+  */
+  public record BookstoreBook(
+  long id,
+  String title,
+  String author,
+  String isbn,
+  int publishedYear
+  ) {}Step 2: Create the New BookDetailsControllerNow, let's create the new controller. This class will handle the GET /books/{id} endpoint.Create the file src/main/java/org/example/BookDetailsController.java:Javapackage org.example;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/books") // The endpoint from your plan
+public class BookDetailsController {
+
+    private final List<BookstoreBook> bookDatabase;
+
+    // Constructor to initialize an in-memory database of books
+    public BookDetailsController() {
+        this.bookDatabase = List.of(
+            new BookstoreBook(1, "Harry Potter and the Philosopher's Stone", "J.K. Rowling", "9780439708180", 1997),
+            new BookstoreBook(2, "The Hobbit", "J.R.R. Tolkien", "9780547928227", 1937),
+            new BookstoreBook(3, "1984", "George Orwell", "9780451524935", 1949),
+            new BookstoreBook(4, "The Lord of the Rings", "J.R.R. Tolkien", "9780618640157", 1954),
+            new BookstoreBook(5, "Harry Potter and the Chamber of Secrets", "J.K. Rowling", "9780439064873", 1998),
+            new BookstoreBook(6, "Animal Farm", "George Orwell", "9780451526342", 1945)
+        );
+    }
+
+    /**
+     * Implements Scenario 2: Getting a single book by its ID.
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<BookstoreBook> getBookById(@PathVariable long id) {
+        Optional<BookstoreBook> book = bookDatabase.stream()
+            .filter(b -> b.id() == id)
+            .findFirst();
+
+        return book.map(ResponseEntity::ok) // Book found: return 200 OK with the book
+                   .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build()); // Book not found: return 404 Not Found
+    }
+}
+How It Works and How to Test ItAfter restarting your application, you can test the new /books/{id} endpoint. The Swagger UI at http://localhost:8081/swagger-ui.html will show the new book-details-controller.Here are some example URLs you can try directly in your browser to see the results:•Get book with ID 1:•http://localhost:8081/books/1•Get book with ID 4:•http://localhost:8081/books/4•Try to get a book with a non-existent ID (e.g., 99):•http://localhost:8081/books/99  (This will return a 404 Not Found)This implementation provides a way to retrieve a specific book by its ID, as described in your scenario plan.
+
+**************
+# pls implement this serario ine class Scenario 3: Creating a New Resource (The Create Operation)
+You, as an admin, want to add a new book to the bookstore.
+
+API Endpoint: POST /books
+Method Type: POST
+Parameter Type:
+Request Body (Required): The data for the new book, typically in JSON format.
+Headers: Content-Type: application/json is crucial to tell the server the body format.
+Response Type:
+Success (201 Created): The resource was successfully created. The response body often includes the newly created object (with its generated ID), and a Location header pointing to the new resource (e.g., Location: /books/5).
+Error (400 Bad Request): If the client's request is invalid (e.g., missing required fields like title).
+Example Request & Response:
+POST /books HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+
+{
+"title": "The Hobbit",
+"author": "J.R.R. Tolkien",
+"isbn": "9780547928227",
+"published_year": 1937
+}
+// Response (201 Created)
+// Header: Location: /books/5
+{
+"id": 5, // Server-generated ID
+"title": "The Hobbit",
+"author": "J.R.R. Tolkien",
+"isbn": "9780547928227",
+"published_year": 1937
+}
+
+
+Ok, let's implement the "Creating a New Resource" scenario. We will create a new controller that handles the POST /books endpoint, validates the request body, and returns the newly created book with a 201 Created status and a Location header.Step 1: Create a DTO for the New Book RequestFirst, let's create a DTO (Data Transfer Object) to represent the data required to create a new book. This DTO will include validation annotations to ensure that the request body is valid.Create the file src/main/java/org/example/NewBookRequest.java:Javapackage org.example;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+
+public record NewBookRequest(
+@NotBlank(message = "Title cannot be blank")
+String title,
+@NotBlank(message = "Author cannot be blank")
+String author,
+@NotBlank(message = "ISBN cannot be blank")
+String isbn,
+@NotNull(message = "Published year cannot be null")
+@Positive(message = "Published year must be positive")
+Integer publishedYear
+) {}Step 2: Create the New BookCreationControllerNow, let's create the new controller. This class will handle the POST /books endpoint.Create the file src/main/java/org/example/BookCreationController.java:Javapackage org.example;
+
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+
+@RestController
+@RequestMapping("/books")
+public class BookCreationController {
+
+    private final List<BookstoreBook> bookDatabase = new ArrayList<>();
+    private final AtomicLong idGenerator = new AtomicLong();
+
+    @PostMapping
+    public ResponseEntity<BookstoreBook> createBook(@Valid @RequestBody NewBookRequest newBookRequest) {
+        // Generate a new unique ID
+        long newId = idGenerator.incrementAndGet();
+
+        // Create a new BookstoreBook from the NewBookRequest
+        BookstoreBook newBook = new BookstoreBook(
+            newId,
+            newBookRequest.title(),
+            newBookRequest.author(),
+            newBookRequest.isbn(),
+            newBookRequest.publishedYear()
+        );
+
+        // Save the new book to the database
+        bookDatabase.add(newBook);
+
+        // Build the URI for the new resource
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+            .path("/{id}")
+            .buildAndExpand(newId)
+            .toUri();
+
+        // Return the new book with a 201 Created status and the Location header
+        return ResponseEntity.created(location).body(newBook);
+    }
+}
+How It Works and How to Test ItAfter restarting your application, you can test the new POST /books endpoint. 
+
+The Swagger UI at http://localhost:8081/swagger-ui.html will show the new book-creation-controller.
+Here's an example of how to test it using curl:
+Shell Scriptc
+url -X POST http://localhost:8081/books \
+-H "Content-Type: application/json" \
+-d '{
+"title": "The Hobbit",
+"author": "J.R.R. Tolkien",
+"isbn": "9780547928227",
+"publishedYear": 1937
+}'
+
+This implementation provides a way to create a new book, as described in your scenario plan, including request body validation and the correct HTTP status and Location header in the response.
+
+
+************
+# pls implement this in new  class Scenario 4: Updating a Resource (Full Update)
+You want to update all the information for a specific book. You send the complete object.
+
+API Endpoint: PUT /books/{id}
+Method Type: PUT
+Parameter Type:
+Path Parameter (Required): The {id} of the book to update.
+Request Body (Required): The complete replacement book data in JSON.
+Response Type:
+Success (200 OK): Standard for a successful update. Returns the updated resource.
+Success (204 No Content): Also common. The update was successful, but the response body is intentionally empty.
+Error (400 Bad Request): Invalid data sent.
+Error (404 Not Found): Book to update doesn't exist.
+Example Request & Response:
+PUT /books/5 HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+
+{
+"id": 5, // ID is often included in the body for PUT
+"title": "The Hobbit, or There and Back Again", // Full title
+"author": "J.R.R. Tolkien",
+"isbn": "9780547928227",
+"published_year": 1937
+}
+// Response (200 OK)
+{
+"id": 5,
+"title": "The Hobbit, or There and Back Again",
+"author": "J.R.R. Tolkien",
+"isbn": "9780547928227",
+"published_year": 1937
+}
+
+Of course! Let's implement this "full update" scenario using the PUT method. This pattern is crucial for providing full control over a resource's state.I will create a new, self-contained controller for this. A key difference here is that since we are updating data, we need a mutable in-memory database (unlike the previous List.of() which is immutable). A ConcurrentHashMap is perfect for this.Step 1: Create a DTO for the Update RequestWhile the request body looks identical to the BookstoreBook model, it's a best practice to use a separate Data Transfer Object (DTO) for incoming requests. This allows us to add specific validation rules without altering our core domain model.Create the file src/main/java/org/example/UpdateBookRequest.java:Javapackage org.example;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+
+/**
+* A DTO representing the complete data needed to update a book.
+* Includes validation to ensure all fields are present and valid.
+  */
+  public record UpdateBookRequest(
+  @NotBlank(message = "Title cannot be blank")
+  String title,
+
+  @NotBlank(message = "Author cannot be blank")
+  String author,
+
+  @NotBlank(message = "ISBN cannot be blank")
+  String isbn,
+
+  @NotNull(message = "Published year cannot be null")
+  @Positive(message = "Published year must be a positive number")
+  Integer publishedYear
+  ) {}Step 2: Create the New BookUpdateControllerThis controller will handle the PUT /books/{id} endpoint. It will find the book, validate the incoming data, replace the old book with the new one, and return the updated resource.Create the file src/main/java/org/example/BookUpdateController.java:Javapackage org.example;
+
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+@RequestMapping("/books") // We add our new PUT method to the existing "/books" path
+public class BookUpdateController {
+
+    // Use a ConcurrentHashMap for a mutable, thread-safe in-memory database
+    private final Map<Long, BookstoreBook> bookDatabase = new ConcurrentHashMap<>();
+
+    // Constructor to initialize the database
+    public BookUpdateController() {
+        // Pre-populate with some data
+        bookDatabase.put(1L, new BookstoreBook(1, "Harry Potter and the Philosopher's Stone", "J.K. Rowling", "9780439708180", 1997));
+        bookDatabase.put(2L, new BookstoreBook(2, "The Hobbit", "J.R.R. Tolkien", "9780547928227", 1937));
+        bookDatabase.put(3L, new BookstoreBook(3, "1984", "George Orwell", "9780451524935", 1949));
+        bookDatabase.put(4L, new BookstoreBook(4, "The Lord of the Rings", "J.R.R. Tolkien", "9780618640157", 1954));
+        bookDatabase.put(5L, new BookstoreBook(5, "Harry Potter and the Chamber of Secrets", "J.K. Rowling", "9780439064873", 1998));
+        bookDatabase.put(6L, new BookstoreBook(6, "Animal Farm", "George Orwell", "9780451526342", 1945));
+    }
+
+    /**
+     * Implements Scenario 4: Updating a resource with a full replacement (PUT).
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<BookstoreBook> updateBook(
+            @PathVariable long id,
+            @Valid @RequestBody UpdateBookRequest updateRequest
+    ) {
+        // 1. Check if the resource to be updated actually exists.
+        if (!bookDatabase.containsKey(id)) {
+            // If not, return 404 Not Found, as per the scenario.
+            return ResponseEntity.notFound().build();
+        }
+
+        // 2. Create the updated book object.
+        // The ID from the URL path is the source of truth, not any ID that might be in the body.
+        BookstoreBook updatedBook = new BookstoreBook(
+            id,
+            updateRequest.title(),
+            updateRequest.author(),
+            updateRequest.isbn(),
+            updateRequest.publishedYear()
+        );
+
+        // 3. Replace the old book with the new one in the database.
+        bookDatabase.put(id, updatedBook);
+
+        // 4. Return 200 OK with the newly updated resource in the body.
+        return ResponseEntity.ok(updatedBook);
+    }
+}How It Works and How to Test ItRestart your application to load the new controller.1.Open Swagger UI: Navigate to http://localhost:8081/swagger-ui.html. You will see the new PUT /books/{id} endpoint under the book-update-controller.2.Use the "Try it out" feature:•Set the id parameter to 5.•In the request body, paste the following JSON and change the title:JSON{
+"title": "Harry Potter and the Chamber of Secrets (Updated Edition)",
+"author": "J.K. Rowling",
+"isbn": "9780439064873",
+"publishedYear": 1998
+}
+•Execute the request. You will get a 200 OK response with the updated book object.
+
+3.Verify the update: 
+Now, use the GET /books/{id} endpoint (from BookDetailsController) to request book
+ You will see that its title has been permanently changed.
+
+ 4.Test the error cases:•Try to PUT to a non-existent ID like 99. 
+ You will receive a 404 Not Found.•Try to PUT with an empty title in the request body. 
+You will receive a 400 Bad Request because of the @NotBlank validation you added.
+
+*********
+pls implement this sernario in new class .Scenario 5: Partially Updating a Resource (Partial Update)
+You only want to update the price of a book. It's inefficient to send the entire book object. You only send the fields that are changing.
+
+API Endpoint: PATCH /books/{id}
+Method Type: PATCH
+Parameter Type:
+Path Parameter (Required): The {id} of the book to update.
+Request Body (Required): A JSON object containing only the fields to update.
+Response Type:
+Success (200 OK): Returns the full updated resource.
+Success (204 No Content): Update successful, no body.
+Error (400 Bad Request, 404 Not Found): Same as PUT.
+Example Request & Response:
+PATCH /books/5 HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+
+{
+"price": 9.99 // Only the field that is changing
+}
+// Response (200 OK)
+{
+"id": 5,
+"title": "The Hobbit, or There and Back Again",
+"author": "J.R.R. Tolkien",
+"isbn": "9780547928227",
+"published_year": 1937,
+"price": 9.99 // New price is included
+}
+
+Alright, let's dive into implementing the "Partially Updating a Resource" scenario using the PATCH method. This approach is perfect for efficiently updating only specific fields of a resource.I'll create a new controller for this scenario. Since we're dealing with updates, I'll again use a ConcurrentHashMap for our in-memory data store to allow modifications.Step 1: Create a DTO for the Partial Update RequestFor a PATCH request, we need a DTO that represents the fields that can be updated.  It's crucial that the fields in this DTO are nullable (e.g., using Double instead of double for the price), because the client will only send the fields they want to change.Create the file src/main/java/org/example/PartialBookUpdateRequest.java:Javapackage org.example;
+
+import jakarta.validation.constraints.Positive;
+
+/**
+* A DTO representing the *optional* data that can be sent to update a book's details.
+* Note that all fields are nullable to support the PATCH semantics.
+  */
+  public record PartialBookUpdateRequest(
+  String title,
+  String author,
+  String isbn,
+  @Positive(message = "Published year must be positive")
+  Integer publishedYear,
+  Double price // Price is now nullable
+  ) {}Step 2: Create the New BookPartialUpdateControllerThis controller will handle the PATCH /books/{id} endpoint. It will retrieve the book, apply the partial updates from the request body, and return the updated resource.Create the file src/main/java/org/example/BookPartialUpdateController.java:Javapackage org.example;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+@RequestMapping("/books") // We add our new PATCH method to the existing "/books" path
+public class BookPartialUpdateController {
+
+    // Use a ConcurrentHashMap for a mutable, thread-safe in-memory database
+    private final Map<Long, BookstoreBook> bookDatabase = new ConcurrentHashMap<>();
+
+    // Constructor to initialize the database with some data
+    public BookPartialUpdateController() {
+        // Pre-populate with some data
+        bookDatabase.put(1L, new BookstoreBook(1, "Harry Potter and the Philosopher's Stone", "J.K. Rowling", "9780439708180", 1997));
+        bookDatabase.put(2L, new BookstoreBook(2, "The Hobbit", "J.R.R. Tolkien", "9780547928227", 1937));
+        bookDatabase.put(3L, new BookstoreBook(3, "1984", "George Orwell", "9780451524935", 1949));
+        bookDatabase.put(4L, new BookstoreBook(4, "The Lord of the Rings", "J.R.R. Tolkien", "9780618640157", 1954));
+        bookDatabase.put(5L, new BookstoreBook(5, "Harry Potter and the Chamber of Secrets", "J.K. Rowling", "9780439064873", 1998));
+        bookDatabase.put(6L, new BookstoreBook(6, "Animal Farm", "George Orwell", "9780451526342", 1945));
+    }
+
+    /**
+     * Implements Scenario 5: Updating a resource with a partial update (PATCH).
+     */
+    @PatchMapping("/{id}")
+    public ResponseEntity<BookstoreBook> updateBook(
+            @PathVariable long id,
+            @RequestBody PartialBookUpdateRequest updateRequest
+    ) {
+        // 1. Check if the resource to be updated exists.
+        BookstoreBook existingBook = bookDatabase.get(id);
+        if (existingBook == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // 2. Apply the updates from the request.
+        // For each field in the DTO, check if it's present in the request.
+        // If it is, update the corresponding field in the existing book.
+        String title = (updateRequest.title() != null) ? updateRequest.title() : existingBook.title();
+        String author = (updateRequest.author() != null) ? updateRequest.author() : existingBook.author();
+        String isbn = (updateRequest.isbn() != null) ? updateRequest.isbn() : existingBook.isbn();
+        Integer publishedYear = (updateRequest.publishedYear() != null) ? updateRequest.publishedYear() : existingBook.publishedYear();
+
+        // 3. Create the updated book object.
+        BookstoreBook updatedBook = new BookstoreBook(
+            id,
+            title,
+            author,
+            isbn,
+            publishedYear
+        );
+
+        // 4. Replace the old book with the new one in the database.
+        bookDatabase.put(id, updatedBook);
+
+        // 5. Return 200 OK with the newly updated resource in the body.
+        return ResponseEntity.ok(updatedBook);
+    }
+}
+How It Works and How to Test ItRestart your application to load the new controller.1.Open Swagger UI: Navigate to http://localhost:8081/swagger-ui.html. You will see the new PATCH /books/{id} endpoint under the book-partial-update-controller.2.Use the "Try it out" feature:•Set the id parameter to 5.•In the request body, paste the following JSON to update only the price:JSON{
+"price": 12.99
+}•Execute the request. You will get a 200 OK response with the updated book object, including the new price.3.Verify the update: Now, use the GET /books/{id} endpoint (from BookDetailsController) to request book 5. You will see that its price has been updated, while all other fields remain the same.4.Test a different update:•Try to PATCH the book with only the author field:JSON{
+"author": "New Author"
+}•Verify that only the author has been changed.This implementation provides a way to partially update a book, as described in your scenario plan.  It's efficient because it only requires sending the fields that need to be changed.
+
+***************
+pls impl this sernario in new class Scenario 6: Deleting a Resource
+You want to remove a book from the catalog.
+
+API Endpoint: DELETE /books/{id}
+Method Type: DELETE
+Parameter Type:
+Path Parameter (Required): The {id} of the book to delete.
+Response Type:
+Success (204 No Content): The most common and clean response. The resource was deleted and there's nothing to return.
+Success (200 OK): Less common, might return a confirmation message.
+Error (404 Not Found): The book to delete doesn't exist.
+Error (409 Conflict): If the resource can't be deleted due to business rules (e.g., the book is part of an active order).
+Example Request & Response:
+DELETE /books/5 HTTP/1.1
+Host: api.example.com
+// Response (204 No Content)
+// No body in the response
+
+
+
+
+
+
+
+Of course! Let's implement the "Deleting a Resource" scenario. This is a fundamental part of any CRUD API.I'll create a new, self-contained controller for this. As with the update scenarios, we need a mutable data store, so a ConcurrentHashMap is the perfect choice for our in-memory database.Create the New BookDeletionControllerThis controller will handle the DELETE /books/{id} endpoint. It will find the book by its ID and remove it from our data store, returning the appropriate HTTP status code.Create the file src/main/java/org/example/BookDeletionController.java:Javapackage org.example;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+@RequestMapping("/books") // We add our new DELETE method to the existing "/books" path
+public class BookDeletionController {
+
+    // Use a ConcurrentHashMap for a mutable, thread-safe in-memory database
+    private final Map<Long, BookstoreBook> bookDatabase = new ConcurrentHashMap<>();
+
+    // Constructor to initialize the database
+    public BookDeletionController() {
+        // Pre-populate with some data that we can delete
+        bookDatabase.put(1L, new BookstoreBook(1, "Harry Potter and the Philosopher's Stone", "J.K. Rowling", "9780439708180", 1997));
+        bookDatabase.put(2L, new BookstoreBook(2, "The Hobbit", "J.R.R. Tolkien", "9780547928227", 1937));
+        bookDatabase.put(3L, new BookstoreBook(3, "1984", "George Orwell", "9780451524935", 1949));
+        // We will try to delete book with ID 6
+        bookDatabase.put(6L, new BookstoreBook(6, "Animal Farm", "George Orwell", "9780451526342", 1945));
+    }
+
+    /**
+     * Implements Scenario 6: Deleting a resource by its ID.
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteBook(@PathVariable long id) {
+        // The remove() method on a Map is perfect for this.
+        // It removes the entry and returns the value that was associated with the key.
+        // If no entry existed for the key, it returns null.
+        BookstoreBook removedBook = bookDatabase.remove(id);
+
+        if (removedBook == null) {
+            // If remove() returns null, the book to delete didn't exist.
+            // Return 404 Not Found, as per the scenario.
+            return ResponseEntity.notFound().build();
+        }
+
+        // If a book was successfully removed, return 204 No Content.
+        // This is the standard, clean response for a successful deletion.
+        return ResponseEntity.noContent().build();
+    }
+}How It Works and How to Test ItRestart your application to load the new controller.1.Open Swagger UI: Navigate to http://localhost:8081/swagger-ui.html. You will now see the DELETE /books/{id} endpoint listed under the book-deletion-controller.2.Use the "Try it out" feature:•Set the id parameter to 6.•Execute the request. You will get a 204 No Content response, which shows up in the UI as a success with no response body.3.Verify the deletion: Now, try to use the GET /books/{id} endpoint (from BookDetailsController) to request the book with ID 6. You will correctly receive a 404 Not Found error, confirming the book has been deleted.4.Test the error case:•Try to DELETE the book with ID 99 (which never existed). You will immediately get a 404 Not Found response.This implementation cleanly handles the deletion logic as described in your plan, providing clear feedback to the client through standard HTTP status codes.
+
+**************************
+pls impl this sernaio  Scenario 7: Authentication & Authorization
+You want to access a user's personal wishlist. This requires the user to be logged in.
+
+API Endpoint: GET /wishlist
+Method Type: GET
+Parameter Type:
+Header Parameter (Required): An Authorization header, often containing a Bearer Token or API Key.
+Authorization: Bearer eyJhbGci... (for JWT tokens)
+X-API-Key: your_api_key_here
+Response Type:
+Success (200 OK): Returns the user's wishlist.
+Error (401 Unauthorized): The provided token/key is invalid or missing.
+Error (403 Forbidden): The token is valid, but the user doesn't have permission to view this wishlist.
+
 
 
